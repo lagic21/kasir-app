@@ -34,6 +34,12 @@ tfoot td{font-weight:bold;background:#e9ffe9}
 </style>
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://vmemzgbjozzucvlmnsup.supabase.co/rest/v1/'  // ganti punya kamu
+  const SUPABASE_KEY = 'sb_publishable_tXZ7jwBs76LsjbQl572H7w_p3Qzt5Ss'   // ganti punya kamu
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+</script>
 <body>
 <div class="container">
 <h2>?? Kasir + Bayar Gratis</h2>
