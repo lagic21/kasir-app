@@ -170,7 +170,13 @@ tfoot td{font-weight:bold;background:#e9ffe9}
     <button onclick="tutupScanner()" style="background:red">Tutup Kamera</button>
   </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const supabase = Supabase.createClient('https://vmemzgbjozzucvlmnsup.supabase.co/rest/v1/', 'sb_publishable_tXZ7jwBs76LsjbQl572H7w_p3Qzt5Ss')
 
+async function simpanKeDB(data) {
+  await supabase.from('riwayat').insert([data])
+}
 <script>
 let barang = JSON.parse(localStorage.getItem('barang')) || [];
 let riwayat = JSON.parse(localStorage.getItem('riwayat')) || [];
