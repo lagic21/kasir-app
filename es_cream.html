@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kasir + Bayar Gratis</title>
+<style>
+body{font-family:sans-serif;background:#f4f4f4;padding:15px}
+.container{max-width:750px;margin:auto;background:white;padding:20px;border-radius:10px;box-shadow:0 2px 5px #ccc}
+input,select,button{width:100%;padding:10px;margin:5px 0;border:1px solid #ddd;border-radius:5px}
+button{background:#28a745;color:white;border:none;cursor:pointer}
+button:hover{background:#218838}
+table{width:100%;margin-top:15px;border-collapse:collapse}
+th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:13px}
+th{background:#28a745;color:white}
+tfoot td{font-weight:bold;background:#e9ffe9}
+.stok-habis{color:red;font-weight:bold}
+.tab button{background:#ccc;margin-right:5px;width:auto;padding:8px 15px}
+.tab button.active{background:#28a745}
+.tabcontent{display:none}
+.btn-edit{background:#ffc107;color:black;padding:5px 8px;font-size:12px;width:auto;margin-right:5px}
+.btn-hapus{background:red;padding:5px 8px;font-size:12px;width:auto}
+.btn-scan{background:#007bff;width:auto;padding:10px 15px}
+.btn-export{background:#17a2b8;width:auto;padding:8px 15px;margin-left:5px}
+.input-flex{display:flex;gap:5px;align-items:center}
+.filter-box{display:flex;gap:5px;margin:10px 0;align-items:center}
+.filter-box select{width:auto;flex:1}
+.popup{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:none;justify-content:center;align-items:center;z-index:999}
+.popup-content{background:white;padding:20px;border-radius:10px;text-align:center;max-width:400px;width:90%}
+.popup-content img{width:250px;height:250px;border:2px solid #333}
+.popup-content button{margin-top:10px;background:red}
+#reader{width:100%;margin-top:10px}
+.gratis-info{background:#d4edda;color:#155724;padding:10px;border-radius:5px;margin:10px 0;text-align:center;font-weight:bold}
+</style>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+<div class="container">
+<h2>?? Kasir + Bayar Gratis</h2>
+
+<div class="tab">
+<button class="tablinks active" onclick="bukaTab(event,'Kasir')">Kasir</button>
+<button class="tablinks" onclick="bukaTab(event,'Barang')">Data Barang</button>
+<button class="tablinks" onclick="bukaTab(event,'Riwayat')">Riwayat</button>
+<button class="tablinks" onclick="bukaTab(event,'Setting')">Setting</button>
+</div>
+
+<!-- TAB KASIR -->
+<div id="Kasir" class="tabcontent" style="display:block">
+<h3>Tambah ke Keranjang</h3>
+<input type="text" id="namaPembeli" placeholder="Nama Pembeli - opsional">
+
+<div class="input-flex">
+  <select id="pilihBarang" style="flex:1"></select>
+  <button class="btn-scan" onclick="bukaScanner('kasir')">?? Scan</button>
+</div>
+
+<input type="number" id="qty" placeholder="Jumlah" min="1" value="1">
+<button onclick="tambahKeranjang()">+ Tambah ke Keranjang</button>
+
+<h3>Keranjang Belanja</h3>
+<table id="tabelKeranjang">
+<tr><th>Barang</th><th>Qty</th><th>Subtotal</th><th>Hapus</th></tr>
+</table>
+
+<h4>Total: Rp<span id="grandTotal">0</span></h4>
+
+<label>Cara Bayar:</label>
+<select id="caraBayar" onchange="toggleBayar()">
+  <option value="Tunai">Tunai/Cash</option>
+  <option value="Transfer">Transfer</option>
+  <option value="QRIS">QRIS</option>
+  <option value="Gratis">Gratis/Promosi</option>
+</select>
+
+<div id="bayarTunai">
+  <input type="number" id="uangBayar" placeholder="Uang Diterima" oninput="hitungKembalian()">
+  <h4>Kembalian: Rp<span id="kembalian">0</span></h4>
+</div>
+
+<div id="bayarGratis" class="gratis-info" style="display:none">
+  ?? Transaksi Gratis - Total Rp 0
+</div>
+
+<button onclick="bayar()">BAYAR SEMUA</button>
+<button onclick="kosongkanKeranjang()" style="background:orange">Kosongkan Keranjang</button>
+<p id="pesanSukses" style="color:green;text-align:center;display:none">? Transaksi berhasil!</p>
+</div>
+
+<!-- TAB BARANG -->
+<div id="Barang" class="tabcontent">
+<h3 id="judulForm">Tambah Barang</h3>
+<input type="hidden" id="editId">
+
+<div class="input-flex">
+  <input type="text" id="kodeBarcode" placeholder="Kode Barcode - scan atau ketik" style="flex:1">
+  <button class="btn-scan" onclick="bukaScanner('barang')">?? Scan</button>
+</div>
+
+<input type="text" id="namaBarang" placeholder="Nama Barang">
+<input type="number" id="harga" placeholder="Harga">
+<input type="number" id="stokAwal" placeholder="Stok Awal / Jumlah Restock">
+<input type="date" id="tglInput" readonly>
+<input type="date" id="tglUpdate" readonly style="display:none">
+
+<button id="btnSimpan" onclick="simpanBarang()">Simpan Barang</button>
+<button id="btnBatal" onclick="batalEdit()" style="background:gray;display:none">Batal</button>
+
+<h3>Daftar Barang</h3>
+<div class="filter-box">
+  <select id="filterTglBarang" onchange="refresh()">
+    <option value="semua">Semua Tanggal</option>
+    <option value="hariini">Hari Ini</option>
+    <option value="mingguini">Minggu Ini</option>
+    <option value="bulanini">Bulan Ini</option>
+    <option value="custom">Pilih Tanggal</option>
+  </select>
+  <input type="date" id="filterCustomBarang" style="display:none" onchange="refresh()">
+</div>
+
+<table id="tabelBarang"></table>
+</div>
+
+<!-- TAB RIWAYAT -->
+<div id="Riwayat" class="tabcontent">
+<h3>Riwayat Transaksi</h3>
+<div class="filter-box">
+  <select id="filterTglRiwayat" onchange="refresh()">
+    <option value="semua">Semua Tanggal</option>
+    <option value="hariini">Hari Ini</option>
+    <option value="mingguini">Minggu Ini</option>
+    <option value="bulanini">Bulan Ini</option>
+    <option value="custom">Pilih Tanggal</option>
+  </select>
+  <input type="date" id="filterCustomRiwayat" style="display:none" onchange="refresh()">
+  <button class="btn-export" onclick="exportCSV()">?? Export CSV</button>
+</div>
+<table id="tabelRiwayat"></table>
+<button onclick="hapusRiwayat()" style="background:red">Hapus Semua Riwayat</button>
+</div>
+
+<!-- TAB SETTING QRIS -->
+<div id="Setting" class="tabcontent">
+<h3>Upload Gambar QRIS</h3>
+<input type="file" id="uploadQR" accept="image/*" onchange="uploadQRIS(event)">
+<img id="previewQR" style="width:200px;margin-top:10px;display:none">
+<button onclick="hapusQRIS()" style="background:red">Hapus QRIS</button>
+</div>
+
+</div>
+
+<!-- POPUP QRIS -->
+<div id="popupQRIS" class="popup" onclick="tutupPopup()">
+  <div class="popup-content" onclick="event.stopPropagation()">
+    <h3>Scan QRIS untuk Bayar</h3>
+    <p id="namaQRIS"></p>
+    <h4>Total: Rp<span id="totalQRIS">0</span></h4>
+    <img id="imgQRIS">
+    <p>Setelah bayar, klik "Sudah Bayar"</p>
+    <button onclick="konfirmasiBayar()">Sudah Bayar</button>
+    <button onclick="tutupPopup()" style="background:gray">Batal</button>
+  </div>
+</div>
+
+<!-- POPUP SCANNER -->
+<div id="popupScan" class="popup" onclick="tutupScanner()">
+  <div class="popup-content" onclick="event.stopPropagation()">
+    <h3 id="judulScan">Arahkan ke Barcode</h3>
+    <div id="reader"></div>
+    <button onclick="tutupScanner()" style="background:red">Tutup Kamera</button>
+  </div>
+</div>
+
+<script>
+let barang = JSON.parse(localStorage.getItem('barang')) || [];
+let riwayat = JSON.parse(localStorage.getItem('riwayat')) || [];
+let imgQRIS = localStorage.getItem('imgQRIS') || '';
+let keranjang = [];
+let tempTransaksi = null;
+let html5QrCode = null;
+let modeScan = '';
+let modeEdit = 'tambah';
+
+// Migrasi data lama
+barang = barang.map(b => {
+  if(b.stok_awal === undefined){
+    b.stok_awal = b.stok || 0;
+    b.stok_akhir = b.stok || 0;
+    b.kode = b.kode || '';
+    b.tanggal = b.tanggal || new Date().toISOString().split('T')[0];
+    b.tgl_update = b.tgl_update || '-';
+  }
+  return b;
+});
+simpan();
+
+document.getElementById('tglInput').valueAsDate = new Date();
+
+function simpan(){
+  localStorage.setItem('barang', JSON.stringify(barang));
+  localStorage.setItem('riwayat', JSON.stringify(riwayat));
+}
+
+function bukaTab(evt, tabName){
+  document.querySelectorAll('.tabcontent').forEach(t=>t.style.display='none');
+  document.querySelectorAll('.tablinks').forEach(b=>b.classList.remove('active'));
+  document.getElementById(tabName).style.display='block';
+  evt.currentTarget.classList.add('active');
+
+  if(tabName=='Barang'){
+    document.getElementById('tglInput').valueAsDate = new Date();
+  }
+  refresh();
+}
+
+document.getElementById('filterTglBarang').onchange = function(){
+  document.getElementById('filterCustomBarang').style.display = this.value=='custom'? 'block' : 'none';
+}
+document.getElementById('filterTglRiwayat').onchange = function(){
+  document.getElementById('filterCustomRiwayat').style.display = this.value=='custom'? 'block' : 'none';
+}
+
+function toggleBayar(){
+  let cara = document.getElementById('caraBayar').value;
+  document.getElementById('bayarTunai').style.display = cara=='Tunai'? 'block' : 'none';
+  document.getElementById('bayarGratis').style.display = cara=='Gratis'? 'block' : 'none';
+
+  if(cara=='Gratis'){
+    document.getElementById('kembalian').innerText = '0';
+  } else {
+    hitungKembalian();
+  }
+}
+
+function uploadQRIS(event){
+  let file = event.target.files[0];
+  let reader = new FileReader();
+  reader.onload = function(e){
+    imgQRIS = e.target.result;
+    localStorage.setItem('imgQRIS', imgQRIS);
+    document.getElementById('previewQR').src = imgQRIS;
+    document.getElementById('previewQR').style.display = 'block';
+    alert('QRIS berhasil disimpan!');
+  }
+  reader.readAsDataURL(file);
+}
+
+function hapusQRIS(){
+  if(confirm('Hapus gambar QRIS?')){
+    imgQRIS = '';
+    localStorage.removeItem('imgQRIS');
+    document.getElementById('previewQR').style.display = 'none';
+  }
+}
+
+function simpanBarang(){
+  let id = document.getElementById('editId').value;
+  let kode = document.getElementById('kodeBarcode').value.trim();
+  let nama = document.getElementById('namaBarang').value;
+  let harga = parseInt(document.getElementById('harga').value);
+  let stokInput = parseInt(document.getElementById('stokAwal').value);
+  let tanggal = document.getElementById('tglInput').value;
+  let tglUpdate = document.getElementById('tglUpdate').value;
+
+  if(!nama ||!harga || stokInput<0) return alert('Isi nama, harga, stok!');
+
+  if(id){
+    let idx = barang.findIndex(b=>b.id==id);
+
+    if(modeEdit=='restock'){
+      barang[idx].stok_awal += stokInput;
+      barang[idx].stok_akhir += stokInput;
+      barang[idx].tgl_update = tglUpdate || new Date().toISOString().split('T')[0];
+      alert('Restock berhasil! Stok awal +'+stokInput+', Stok akhir +'+stokInput);
+    } else {
+      let selisih = stokInput - barang[idx].stok_awal;
+      barang[idx].kode = kode;
+      barang[idx].nama = nama;
+      barang[idx].harga = harga;
+      barang[idx].stok_awal = stokInput;
+      barang[idx].stok_akhir += selisih;
+      alert('Barang berhasil diupdate!');
+    }
+  } else {
+    if(kode && barang.find(b=>b.kode==kode)) return alert('Kode barcode sudah dipakai!');
+    barang.push({
+      id:Date.now(),
+      kode:kode,
+      nama,
+      harga,
+      stok_awal:stokInput,
+      stok_akhir:stokInput,
+      tanggal:tanggal || new Date().toISOString().split('T')[0],
+      tgl_update:'-'
+    });
+    alert('Barang ditambah!');
+  }
+
+  batalEdit();
+  simpan();
+  refresh();
+}
+
+function editBarang(id){
+  modeEdit = 'edit';
+  let b = barang.find(x=>x.id==id);
+  document.getElementById('editId').value = b.id;
+  document.getElementById('kodeBarcode').value = b.kode || '';
+  document.getElementById('namaBarang').value = b.nama;
+  document.getElementById('harga').value = b.harga;
+  document.getElementById('stokAwal').value = b.stok_awal;
+  document.getElementById('tglInput').value = b.tanggal || '';
+  document.getElementById('tglUpdate').style.display = 'none';
+
+  document.getElementById('judulForm').innerText = 'Edit Barang';
+  document.getElementById('stokAwal').placeholder = 'Stok Awal Total';
+  document.getElementById('btnSimpan').innerText = 'Update Barang';
+  document.getElementById('btnBatal').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function restockBarang(id){
+  modeEdit = 'restock';
+  let b = barang.find(x=>x.id==id);
+  document.getElementById('editId').value = b.id;
+  document.getElementById('kodeBarcode').value = b.kode || '';
+  document.getElementById('namaBarang').value = b.nama;
+  document.getElementById('harga').value = b.harga;
+  document.getElementById('stokAwal').value = 0;
+  document.getElementById('tglInput').value = b.tanggal || '';
+  document.getElementById('tglUpdate').valueAsDate = new Date();
+  document.getElementById('tglUpdate').style.display = 'block';
+
+  document.getElementById('judulForm').innerText = 'Restock: '+b.nama;
+  document.getElementById('stokAwal').placeholder = 'Jumlah Barang Masuk';
+  document.getElementById('btnSimpan').innerText = 'Restock Sekarang';
+  document.getElementById('btnBatal').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function batalEdit(){
+  modeEdit = 'tambah';
+  document.getElementById('editId').value = '';
+  document.getElementById('kodeBarcode').value = '';
+  document.getElementById('namaBarang').value = '';
+  document.getElementById('harga').value = '';
+  document.getElementById('stokAwal').value = '';
+  document.getElementById('tglInput').valueAsDate = new Date();
+  document.getElementById('tglUpdate').style.display = 'none';
+
+  document.getElementById('judulForm').innerText = 'Tambah Barang';
+  document.getElementById('stokAwal').placeholder = 'Stok Awal';
+  document.getElementById('btnSimpan').innerText = 'Simpan Barang';
+  document.getElementById('btnBatal').style.display = 'none';
+}
+
+function bukaScanner(mode){
+  modeScan = mode;
+  document.getElementById('judulScan').innerText = mode=='barang'? 'Scan Barcode Barang Baru' : 'Scan Barcode Kasir';
+  document.getElementById('popupScan').style.display = 'flex';
+
+  html5QrCode = new Html5Qrcode("reader");
+  html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    (decodedText) => {
+      if(modeScan=='kasir'){
+        pilihBarangByKode(decodedText);
+      } else {
+        document.getElementById('kodeBarcode').value = decodedText;
+        let b = barang.find(x=>x.kode==decodedText);
+        if(b){
+          document.getElementById('namaBarang').value = b.nama;
+          document.getElementById('harga').value = b.harga;
+          alert('Barcode sudah terdaftar! Data auto terisi.');
+        }
+      }
+      tutupScanner();
+    },
+    (error) => {}
+  );
+}
+
+function tutupScanner(){
+  document.getElementById('popupScan').style.display = 'none';
+  if(html5QrCode){
+    html5QrCode.stop().then().catch(err => {});
+    html5QrCode.clear();
+    html5QrCode = null;
+  }
+}
+
+function pilihBarangByKode(kode){
+  let b = barang.find(x=>x.kode==kode);
+  if(!b) return alert('Barcode '+kode+' belum terdaftar! Tambah dulu di Data Barang.');
+
+  document.getElementById('pilihBarang').value = b.id;
+  tambahKeranjang();
+}
+
+function tambahKeranjang(){
+  let id = parseInt(document.getElementById('pilihBarang').value);
+  let qty = parseInt(document.getElementById('qty').value);
+  let b = barang.find(x=>x.id==id);
+  if(!b) return alert('Pilih barang dulu!');
+  if(qty<1) return alert('Qty minimal 1!');
+  if(qty > b.stok_akhir) return alert('Stok tidak cukup! Sisa: '+b.stok_akhir);
+
+  let item = keranjang.find(k=>k.id==id);
+  if(item){
+    if(item.qty + qty > b.stok_akhir) return alert('Total qty melebihi stok!');
+    item.qty += qty;
+  } else {
+    keranjang.push({id:b.id, nama:b.nama, harga:b.harga, qty:qty});
+  }
+
+  document.getElementById('qty').value = 1;
+  refreshKeranjang();
+}
+
+function hapusKeranjang(index){
+  keranjang.splice(index,1);
+  refreshKeranjang();
+}
+
+function kosongkanKeranjang(){
+  if(confirm('Kosongkan semua keranjang?')){
+    keranjang = [];
+    refreshKeranjang();
+  }
+}
+
+function refreshKeranjang(){
+  let tb = '<tr><th>Barang</th><th>Qty</th><th>Subtotal</th><th>Hapus</th></tr>';
+  let total = 0;
+  keranjang.forEach((k,i)=>{
+    let subtotal = k.harga * k.qty;
+    total += subtotal;
+    tb += `<tr><td>${k.nama}</td><td>${k.qty}</td><td>Rp${subtotal.toLocaleString('id-ID')}</td>
+    <td><button onclick="hapusKeranjang(${i})" style="background:red">x</button></td></tr>`;
+  });
+  document.getElementById('tabelKeranjang').innerHTML = tb;
+  document.getElementById('grandTotal').innerText = total.toLocaleString('id-ID');
+  hitungKembalian();
+}
+
+function hitungKembalian(){
+  let total = keranjang.reduce((sum,k)=>sum + k.harga*k.qty, 0);
+  let cara = document.getElementById('caraBayar').value;
+
+  if(cara=='Gratis'){
+    document.getElementById('kembalian').innerText = '0';
+    return;
+  }
+
+  let bayar = parseInt(document.getElementById('uangBayar').value) || 0;
+  document.getElementById('kembalian').innerText = (bayar - total).toLocaleString('id-ID');
+}
+
+function bayar(){
+  if(keranjang.length==0) return alert('Keranjang masih kosong!');
+
+  let caraBayar = document.getElementById('caraBayar').value;
+  let namaPembeli = document.getElementById('namaPembeli').value || 'Umum';
+  let total = keranjang.reduce((sum,k)=>sum + k.harga*k.qty, 0);
+  let totalQty = keranjang.reduce((sum,k)=>sum + k.qty, 0);
+
+  if(caraBayar=='Gratis'){
+    total = 0; // Total jadi 0
+    prosesTransaksi(caraBayar, namaPembeli, total, totalQty);
+  }
+  else if(caraBayar=='Tunai'){
+    let bayar = parseInt(document.getElementById('uangBayar').value) || 0;
+    if(bayar < total) return alert('Uang kurang!');
+    prosesTransaksi(caraBayar, namaPembeli, total, totalQty);
+  }
+  else if(caraBayar=='QRIS'){
+    if(!imgQRIS) return alert('Upload gambar QRIS dulu di tab Setting!');
+    tempTransaksi = {caraBayar, namaPembeli, total, totalQty};
+    document.getElementById('namaQRIS').innerText = 'Atas Nama: ' + namaPembeli;
+    document.getElementById('totalQRIS').innerText = total.toLocaleString('id-ID');
+    document.getElementById('imgQRIS').src = imgQRIS;
+    document.getElementById('popupQRIS').style.display = 'flex';
+  }
+  else if(caraBayar=='Transfer'){
+    prosesTransaksi(caraBayar, namaPembeli, total, totalQty);
+  }
+}
+
+function konfirmasiBayar(){
+  prosesTransaksi(tempTransaksi.caraBayar, tempTransaksi.namaPembeli, tempTransaksi.total, tempTransaksi.totalQty);
+  tutupPopup();
+}
+
+function tutupPopup(){
+  document.getElementById('popupQRIS').style.display = 'none';
+  tempTransaksi = null;
+}
+
+function prosesTransaksi(caraBayar, namaPembeli, total, totalQty){
+  keranjang.forEach(k=>{
+    let b = barang.find(x=>x.id==k.id);
+    b.stok_akhir -= k.qty;
+  });
+
+  let waktu = new Date().toLocaleString('id-ID');
+  let detail = keranjang.map(k=>`${k.nama} x${k.qty}`).join(', ');
+
+  riwayat.unshift({
+    waktu,
+    pembeli:namaPembeli,
+    detail:detail,
+    totalQty:totalQty,
+    total:total,
+    caraBayar:caraBayar
+  });
+
+  simpan();
+
+  keranjang = [];
+  document.getElementById('pesanSukses').style.display = 'block';
+  setTimeout(()=>{document.getElementById('pesanSukses').style.display='none'}, 2000);
+  document.getElementById('namaPembeli').value = '';
+  document.getElementById('uangBayar').value = '';
+  refresh();
+  refreshKeranjang();
+}
+
+function filterTanggal(tglString, filter, filterCustom){
+  if(!tglString) return true;
+  let tgl = tglString.split(' ')[0].split('/').reverse().join('-');
+  let today = new Date().toISOString().split('T')[0];
+
+  if(filter=='hariini') return tgl==today;
+  if(filter=='mingguini'){
+    let d = new Date();
+    let startWeek = new Date(d.setDate(d.getDate()-d.getDay())).toISOString().split('T')[0];
+    return tgl >= startWeek;
+  }
+  if(filter=='bulanini'){
+    let bulanIni = today.substring(0,7);
+    return tgl.substring(0,7)==bulanIni;
+  }
+  if(filter=='custom' && filterCustom) return tgl==filterCustom;
+  return true;
+}
+
+function refresh(){
+  let opt = '<option value="">Pilih Barang</option>';
+  barang.forEach(b=>{
+    let label = b.kode? `[${b.kode}] ${b.nama}` : b.nama;
+    opt += `<option value="${b.id}">${label} - Rp${b.harga.toLocaleString('id-ID')} - Stok:${b.stok_akhir}</option>`;
+  });
+  document.getElementById('pilihBarang').innerHTML = opt;
+
+  let filterBarang = document.getElementById('filterTglBarang')?.value || 'semua';
+  let filterCustomBarang = document.getElementById('filterCustomBarang')?.value || '';
+  let barangFilter = barang.filter(b=>filterTanggal(b.tanggal, filterBarang, filterCustomBarang));
+
+  let tb = '<tr><th>Kode</th><th>Nama</th><th>Harga</th><th>Stok Awal</th><th>Stok Akhir</th><th>Tgl Input</th><th>Update</th><th>Aksi</th></tr>';
+  barangFilter.forEach(b=>{
+    let cls = b.stok_akhir<=5? 'stok-habis' : '';
+    let tgl = b.tanggal? new Date(b.tanggal).toLocaleDateString('id-ID') : '-';
+    let upd = b.tgl_update && b.tgl_update!='-'? new Date(b.tgl_update).toLocaleDateString('id-ID') : '-';
+    tb += `<tr><td>${b.kode||'-'}</td><td>${b.nama}</td><td>Rp${b.harga.toLocaleString('id-ID')}</td>
+    <td>${b.stok_awal}</td><td class="${cls}">${b.stok_akhir}</td><td>${tgl}</td><td>${upd}</td>
+    <td><button class="btn-edit" onclick="restockBarang(${b.id})">Restock</button>
+    <button class="btn-edit" onclick="editBarang(${b.id})" style="background:#17a2b8">Edit</button>
+    <button class="btn-hapus" onclick="hapus(${b.id})">Hapus</button></td></tr>`;
+  });
+
+  if(barangFilter.length==0) tb += '<tr><td colspan="8" style="text-align:center">Tidak ada data</td></tr>';
+  document.getElementById('tabelBarang').innerHTML = tb;
+
+  let filterRiwayat = document.getElementById('filterTglRiwayat')?.value || 'semua';
+  let filterCustomRiwayat = document.getElementById('filterCustomRiwayat')?.value || '';
+  let riwayatFilter = riwayat.filter(r=>filterTanggal(r.waktu, filterRiwayat, filterCustomRiwayat));
+
+  let tr = '<tr><th>Waktu</th><th>Pembeli</th><th>Detail Barang</th><th>Jml Barang</th><th>Total</th><th>Bayar</th></tr>';
+
+  let totalQtySemua = 0;
+  let totalBayarSemua = 0;
+
+  riwayatFilter.forEach(r=>{
+    tr += `<tr><td>${r.waktu}</td><td>${r.pembeli}</td><td>${r.detail}</td><td>${r.totalQty} pcs</td><td>Rp${r.total.toLocaleString('id-ID')}</td><td>${r.caraBayar}</td></tr>`;
+    totalQtySemua += r.totalQty || 0;
+    totalBayarSemua += r.total || 0;
+  });
+
+  tr += `<tfoot><tr>
+    <td colspan="3" style="text-align:right">TOTAL ${filterRiwayat.toUpperCase()}:</td>
+    <td>${totalQtySemua} pcs</td>
+    <td>Rp${totalBayarSemua.toLocaleString('id-ID')}</td>
+    <td>-</td>
+  </tr></tfoot>`;
+
+  if(riwayatFilter.length==0) tr += '<tr><td colspan="6" style="text-align:center">Belum ada transaksi</td></tr>';
+  document.getElementById('tabelRiwayat').innerHTML = tr;
+
+  if(imgQRIS){
+    document.getElementById('previewQR').src = imgQRIS;
+    document.getElementById('previewQR').style.display = 'block';
+  }
+}
+
+function exportCSV(){
+  let filterRiwayat = document.getElementById('filterTglRiwayat')?.value || 'semua';
+  let filterCustomRiwayat = document.getElementById('filterCustomRiwayat')?.value || '';
+  let riwayatFilter = riwayat.filter(r=>filterTanggal(r.waktu, filterRiwayat, filterCustomRiwayat));
+
+  if(riwayatFilter.length==0) return alert('Tidak ada data untuk diexport!');
+
+  let csv = 'Waktu,Pembeli,Detail Barang,Jumlah Barang,Total Bayar,Cara Bayar\n';
+  riwayatFilter.forEach(r=>{
+    let detail = r.detail.replace(/,/g, ';');
+    csv += `"${r.waktu}","${r.pembeli}","${detail}",${r.totalQty},${r.total},"${r.caraBayar}"\n`;
+  });
+
+  let totalQty = riwayatFilter.reduce((sum,r)=>sum + r.totalQty, 0);
+  let totalBayar = riwayatFilter.reduce((sum,r)=>sum + r.total, 0);
+  csv += `\nTOTAL ${filterRiwayat.toUpperCase()},,,${totalQty},${totalBayar},`;
+
+  let blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  let link = document.createElement('a');
+  let namaFile = `riwayat_kasir_${filterRiwayat}_${new Date().toISOString().split('T')[0]}.csv`;
+  link.href = URL.createObjectURL(blob);
+  link.download = namaFile;
+  link.click();
+
+  alert('Export berhasil! File: ' + namaFile);
+}
+
+function hapus(id){
+  if(confirm('Hapus barang ini?')) {
+    barang = barang.filter(b=>b.id!=id);
+    simpan(); refresh();
+  }
+}
+
+function hapusRiwayat(){
+  if(confirm('Hapus semua riwayat?')) {
+    riwayat = [];
+    simpan(); refresh();
+  }
+}
+
+document.getElementById('pilihBarang').onchange = document.getElementById('qty').oninput = hitungKembalian;
+toggleBayar();
+refresh();
+refreshKeranjang();
+</script>
+</body>
+</html>
