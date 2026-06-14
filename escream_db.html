@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kasir Warung Supabase</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+body{font-family:Segoe UI;background:#f5f5f5;margin:0;padding:10px}
+.container{max-width:900px;margin:auto;background:#fff;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+h2{color:#2c3e50;text-align:center;margin:10px 0}
+.tab{display:flex;gap:5px;margin-bottom:15px}
+.tab button{flex:1;padding:10px;border:none;background:#ecf0f1;border-radius:8px;cursor:pointer;font-weight:bold}
+.tab button.active{background:#3498db;color:#fff}
+.tabcontent{display:none}
+input,select{width:100%;padding:8px;margin:5px 0;border:1px solid #ddd;border-radius:6px;box-sizing:border-box}
+button.primary{background:#27ae60;color:#fff;border:none;padding:10px;border-radius:6px;cursor:pointer}
+button.danger{background:#e74c3c}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border:1px solid #ddd;padding:6px;text-align:left}
+th{background:#3498db;color:#fff}
+#reader{width:100%;max-width:400px;margin:auto}
+.badge{background:#e74c3c;color:#fff;padding:2px 6px;border-radius:10px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+<h2>?? Kasir Warung - Supabase</h2>
+
+<div class="tab">
+  <button class="tablinks active" onclick="openTab(event,'Kasir')">Kasir</button>
+  <button class="tablinks" onclick="openTab(event,'Barang')">Data Barang</button>
+  <button class="tablinks" onclick="openTab(event,'Riwayat')">Riwayat</button>
+</div>
+
+<!-- TAB KASIR -->
+<div id="Kasir" class="tabcontent" style="display:block">
+  <input type="text" id="namaPembeli" placeholder="Nama Pembeli">
+  <button onclick="bukaScanner()" class="primary">?? Scan Barcode</button>
+  <div id="reader" style="display:none"></div>
+
+  <h3>Keranjang <span id="jmlKeranjang" class="badge">0</span></h3>
+  <table id="tabelKeranjang"><thead><tr><th>Nama</th><th>Qty</th><th>Harga</th><th>Subtotal</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+
+  <h3>Total: Rp <span id="totalBayar">0</span></h3>
+  <input type="number" id="uangBayar" placeholder="Uang Bayar" oninput="hitungKembalian()">
+  <p>Kembalian: Rp <span id="kembalian">0</span></p>
+  <button class="primary" onclick="bayar('Cash')">Bayar Cash</button>
+  <button class="primary" style="background:#2980b9" onclick="bayar('QRIS')">Bayar QRIS</button>
+</div>
+
+<!-- TAB BARANG -->
+<div id="Barang" class="tabcontent">
+  <h3>Tambah/Edit Barang</h3>
+  <input type="text" id="namaBarang" placeholder="Nama Barang">
+  <input type="number" id="harga" placeholder="Harga">
+  <input type="number" id="stok" placeholder="Stok Awal">
+  <input type="text" id="kodeBarcode" placeholder="Kode Barcode EAN-13/UPC-A">
+  <button class="primary" onclick="simpanBarang()">Simpan Barang</button>
+
+  <h3>Daftar Barang</h3>
+  <table id="tabelBarang"><thead><tr><th>Nama</th><th>Harga</th><th>Stok</th><th>Barcode</th><th>Aksi</th></tr></thead><tbody></tbody></table>
+</div>
+
+<!-- TAB RIWAYAT -->
+<div id="Riwayat" class="tabcontent">
+  <table id="tabelRiwayat"><thead><tr><th>Waktu</th><th>Pembeli</th><th>Detail</th><th>Total</th><th>Bayar</th></tr></thead><tbody></tbody></table>
+</div>
+
+</div>
+
+<script>
+const SUPABASE_URL = 'https://vmemzgbjozzucvlmnsup.supabase.co/rest/v1/'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZtZW16Z2Jqb3p6dWN2bG1uc3VwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0MTkyMzcsImV4cCI6MjA5Njk5NTIzN30.9Vo26Vazrk5KYsRPGayglC1zhYVRpX_vTbbd1XmYunU'
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+let barang = []
+let riwayat = []
+let keranjang = []
+let html5QrCode
+
+// LOAD DATA DARI SUPABASE
+async function loadData(){
+  let {data} = await db.from('barang').select('*').order('id')
+  barang = data || []
+
+  let {data: rwt} = await db.from('riwayat').select('*').order('id', {ascending:false}).limit(100)
+  riwayat = rwt || []
+
+  refresh()
+  refreshRiwayat()
+}
+
+// SIMPAN BARANG
+async function simpanBarang(){
+  let id = Date.now()
+  let data = {
+    id,
+    nama: namaBarang.value,
+    harga: parseInt(harga.value),
+    stok_awal: parseInt(stok.value),
+    stok_akhir: parseInt(stok.value),
+    kode: kodeBarcode.value
+  }
+  await db.from('barang').insert([data])
+  barang.push(data)
+  namaBarang.value=harga.value=stok.value=kodeBarcode.value=''
+  refresh()
+}
+
+// REFRESH TABEL BARANG
+function refresh(){
+  let tb = tabelBarang.querySelector('tbody')
+  tb.innerHTML = barang.map(b=>`
+    <tr>
+      <td>${b.nama}</td>
+      <td>Rp ${b.harga.toLocaleString('id-ID')}</td>
+      <td>${b.stok_akhir}</td>
+      <td>${b.kode}</td>
+      <td><button class="danger" onclick="hapusBarang(${b.id})">Hapus</button></td>
+    </tr>
+  `).join('')
+}
+
+// HAPUS BARANG
+async function hapusBarang(id){
+  await db.from('barang').delete().eq('id', id)
+  barang = barang.filter(b=>b.id!=id)
+  refresh()
+}
+
+// SCANNER
+function bukaScanner(){
+  reader.style.display='block'
+  html5QrCode = new Html5Qrcode("reader")
+  html5QrCode.start({facingMode:"environment"}, {fps:10, qrbox:250}, kode=>{
+    pilihBarangByKode(kode)
+    html5QrCode.stop()
+    reader.style.display='none'
+  })
+}
+
+function pilihBarangByKode(kode){
+  let b = barang.find(x=>x.kode==kode)
+  if(!b) return alert('Barcode belum terdaftar!')
+  if(b.stok_akhir<=0) return alert('Stok habis!')
+
+  let k = keranjang.find(x=>x.id==b.id)
+  if(k) k.qty++
+  else keranjang.push({id:b.id, nama:b.nama, harga:b.harga, qty:1})
+
+  refreshKeranjang()
+}
+
+// REFRESH KERANJANG
+function refreshKeranjang(){
+  let tb = tabelKeranjang.querySelector('tbody')
+  let total = 0
+  tb.innerHTML = keranjang.map(k=>{
+    let sub = k.harga*k.qty
+    total += sub
+    return `<tr><td>${k.nama}</td><td>${k.qty}</td><td>Rp ${k.harga.toLocaleString('id-ID')}</td><td>Rp ${sub.toLocaleString('id-ID')}</td><td><button onclick="kurang(${k.id})">-</button></td></tr>`
+  }).join('')
+  totalBayar.innerText = total.toLocaleString('id-ID')
+  jmlKeranjang.innerText = keranjang.reduce((a,b)=>a+b.qty,0)
+}
+
+function kurang(id){
+  let k = keranjang.find(x=>x.id==id)
+  k.qty--
+  if(k.qty<=0) keranjang = keranjang.filter(x=>x.id!=id)
+  refreshKeranjang()
+}
+
+// BAYAR + SIMPAN RIWAYAT KE SUPABASE
+async function bayar(cara){
+  if(keranjang.length==0) return alert('Keranjang kosong')
+  let total = keranjang.reduce((a,b)=>a+b.harga*b.qty,0)
+  let uang = parseInt(uangBayar.value)||0
+  if(cara=='Cash' && uang<total) return alert('Uang kurang')
+
+  // Kurangi stok di Supabase
+  for(let k of keranjang){
+    let b = barang.find(x=>x.id==k.id)
+    b.stok_akhir -= k.qty
+    await db.from('barang').update({stok_akhir:b.stok_akhir}).eq('id',b.id)
+  }
+
+  // Simpan riwayat
+  let dataRwt = {
+    waktu: new Date().toLocaleString('id-ID'),
+    pembeli: namaPembeli.value||'Umum',
+    detail: keranjang.map(k=>`${k.nama} x${k.qty}`).join(', '),
+    totalQty: keranjang.reduce((a,b)=>a+b.qty,0),
+    total,
+    caraBayar: cara
+  }
+  await db.from('riwayat').insert([dataRwt])
+  riwayat.unshift(dataRwt)
+
+  alert('Transaksi berhasil!')
+  keranjang=[]
+  namaPembeli.value=uangBayar.value=''
+  kembalian.innerText=0
+  refresh()
+  refreshKeranjang()
+  refreshRiwayat()
+}
+
+function refreshRiwayat(){
+  let tb = tabelRiwayat.querySelector('tbody')
+  tb.innerHTML = riwayat.map(r=>`
+    <tr>
+      <td>${r.waktu}</td>
+      <td>${r.pembeli}</td>
+      <td>${r.detail}</td>
+      <td>Rp ${r.total.toLocaleString('id-ID')}</td>
+      <td>${r.caraBayar}</td>
+    </tr>
+  `).join('')
+}
+
+function hitungKembalian(){
+  let total = keranjang.reduce((a,b)=>a+b.harga*b.qty,0)
+  kembalian.innerText = (parseInt(uangBayar.value)||0 - total).toLocaleString('id-ID')
+}
+
+function openTab(evt, tabName){
+  document.querySelectorAll('.tabcontent').forEach(t=>t.style.display='none')
+  document.querySelectorAll('.tablinks').forEach(b=>b.classList.remove('active'))
+  document.getElementById(tabName).style.display='block'
+  evt.currentTarget.classList.add('active')
+}
+
+loadData()
+</script>
+</body>
+</html>
